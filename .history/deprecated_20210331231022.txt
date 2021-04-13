@@ -1,0 +1,122 @@
+// 右指针每次不从最右开始。考虑时间复杂度，但是效果不好
+void migrateVm2(){
+    int n = this->servers.size();
+    int idx[n]; for(int i = 0; i < n; i++) idx[i] = i;
+    sort(idx, idx + n, [&](int x, int y){
+        return this->servers[x].getTotalLeft() > this->servers[y].getTotalLeft();
+            // return this->servers[x].vms.size() > this->servers[y].vms.size();
+    });
+    int total = 0;
+    for(auto& server : servers){
+        total += server.vms.size();
+    }
+    int limit = total/200, curMigrationNum = 0;
+    int toServer = n-1;
+    for(int i = 0; i < toServer; i++){
+        Server& server = this->servers[idx[i]];
+        vector<PII>deleted; // (vm_id, node)
+        for(auto& vm : server.vms){
+            if(curMigrationNum+1 > limit) break;
+            int node;
+            while(toServer > i && (node =this->servers[idx[toServer]].addVm(vm.second, vm.first)) == -1){
+                toServer--;
+            }
+            if(node == -1){ // 无处可插
+                break ;
+            }else{
+                // server.delVm(vm.first, node, false); // 不能在这里删除！！！！！
+                // assert(false);
+                this->migrationInfo.push_back({vm.first, this->servers[idx[toServer]].id, node});
+                deleted.push_back({vm.first, vmToServer[vm.first].node}); // 收集delete信息，待本服务器这个vm循环退出再一起移除。
+                vmToServer[vm.first] = {idx[toServer], node};
+                curMigrationNum++;
+            }
+        }
+        for(auto& pii : deleted){
+            server.delVm(pii.first, pii.second);
+        }
+        if(curMigrationNum+1 > limit) break;
+    }
+    return;
+}
+
+// 打分
+    void deploy0(string model, int id){
+      VirtualMachineInfo vm = vmDict[model];
+      int idx = -1;
+      PII minRes = {-1, INF};
+      for(int i = 0; i < this->servers.size(); i++){
+          Server& server = this->servers[i];
+          if(server.vms.empty()) continue;
+          PII res;
+          int ok = server.getCost(vm, res);
+          if(!ok) continue;
+          if(res.second < minRes.second){
+              minRes = res;
+              idx = i;
+          }
+      }
+      if(minRes.second != INF){
+          // assert(minRes.first == 0 || minRes.first == 1);
+          this->servers[idx].addVm(model, id, minRes.first);
+          vmToServer[id] = {idx, minRes.first};
+          this->addInfo.push_back({this->servers[idx].id, minRes.first, id});
+      }else{
+            VirtualMachineInfo vm = vmDict[model];
+            int minCost = INF, idx = -1;
+            PII minIdx;
+            for(int i = 0; i < this->servers.size(); i++){
+                Server& server = this->servers[i];
+                if(!server.vms.empty()) continue;
+                PII res;
+                int ok = server.getCost(vm, res);
+                if(!ok) continue;
+                if(res.second < minCost){
+                    minCost = res.second;
+                    minIdx = res;
+                    idx = i;
+                }
+            }
+            if(minCost != INF){               
+                this->servers[idx].addVm(model, id, minIdx.first);
+                this->addInfo.push_back({servers[idx].id, minIdx.first, id});
+                vmToServer[id] = {idx, minIdx.first};
+            }else{ // 需要购买
+                string serverModel =  this->purchaseAsRequired(model);
+                this->purchaseInfo.push_back({serverModel, id}); // 为编号为id的虚拟机购买了型号为serverModel的服务器
+                int node = this->servers.back().
+                addVm(model, id);
+                this->addInfo.push_back({-1, node, id});
+                vmToServer[id] = {(int)(this->servers.size()-1), node};
+            }
+      }
+    }
+    // 排序
+    void deploy1(string model, int id){
+       int n = this->servers.size();
+       int idx[n]; for(int i = 0; i < n; i++) idx[i] = i;
+       sort(idx, idx + n, [&](int x, int y){
+           return this->servers[x].getTotalLeft() < this->servers[y].getTotalLeft();
+            // return this->servers[x].vms.size() > this->servers[y].vms.size();
+       });
+       bool ok = false;
+       for(int i = 0; i < n; i++){
+           int k = idx[i];
+           int node = this->servers[k].addVm(model, id);
+           if(node != -1){
+               vmToServer[id] = {k, node};
+               this->addInfo.push_back({this->servers[k].id, node, id});
+               ok = true;
+               break;
+           }
+       }
+       if(!ok){
+           string serverModel =  this->purchaseAsRequired(model);
+           this->purchaseInfo.push_back({serverModel, id}); // 为编号为id的虚拟机购买了型号为serverModel的服务器
+           int node = this->servers.back().
+           addVm(model, id);
+           this->addInfo.push_back({-1, node, id});
+           vmToServer[id] = {(int)(this->servers.size()-1), node};
+       }
+
+    }

@@ -1,0 +1,41 @@
+// 右指针每次不从最右开始。考虑时间复杂度，但是效果不好
+void migrateVm2(){
+    int n = this->servers.size();
+    int idx[n]; for(int i = 0; i < n; i++) idx[i] = i;
+    sort(idx, idx + n, [&](int x, int y){
+        return this->servers[x].getTotalLeft() > this->servers[y].getTotalLeft();
+            // return this->servers[x].vms.size() > this->servers[y].vms.size();
+    });
+    int total = 0;
+    for(auto& server : servers){
+        total += server.vms.size();
+    }
+    int limit = total/200, curMigrationNum = 0;
+    int toServer = n-1;
+    for(int i = 0; i < toServer; i++){
+        Server& server = this->servers[idx[i]];
+        vector<PII>deleted; // (vm_id, node)
+        for(auto& vm : server.vms){
+            if(curMigrationNum+1 > limit) break;
+            int node;
+            while(toServer > i && (node =this->servers[idx[toServer]].addVm(vm.second, vm.first)) == -1){
+                toServer--;
+            }
+            if(node == -1){ // 无处可插
+                break ;
+            }else{
+                // server.delVm(vm.first, node, false); // 不能在这里删除！！！！！
+                // assert(false);
+                this->migrationInfo.push_back({vm.first, this->servers[idx[toServer]].id, node});
+                deleted.push_back({vm.first, vmToServer[vm.first].node}); // 收集delete信息，待本服务器这个vm循环退出再一起移除。
+                vmToServer[vm.first] = {idx[toServer], node};
+                curMigrationNum++;
+            }
+        }
+        for(auto& pii : deleted){
+            server.delVm(pii.first, pii.second);
+        }
+        if(curMigrationNum+1 > limit) break;
+    }
+    return;
+}
